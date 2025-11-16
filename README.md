@@ -11,6 +11,48 @@ Build the perfect Next.js starter in seconds — with TypeScript/JavaScript, Tai
 
 ---
 
+# 🌐 GitHub Repository
+
+[https://github.com/imrashidov/please-fast-next](https://github.com/imrashidov/please-fast-next)
+
+---
+
+# 📦 Installation
+
+Install **please-fast-next** globally via npm:
+
+```bash
+npm install -g please-fast-next
+```
+
+or using Yarn:
+
+```bash
+yarn global add please-fast-next
+```
+
+---
+
+# 🧪 Usage
+
+Run the CLI:
+
+```bash
+please-fast-next
+```
+
+---
+
+# ▶ Start Your Project
+
+```bash
+cd my-app
+npm install
+npm run dev
+```
+
+---
+
 # 🚀 About
 
 **please-fast-next** is an interactive CLI tool that helps developers instantly generate a clean, modern, fully configurable Next.js project.
