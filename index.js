@@ -92,45 +92,78 @@ async function createProject() {
 }
 
 function cleanDefaultFiles(projectPath, ext, langExt, i18nSupport) {
-  const layoutPath = path.join(projectPath, "app", `layout.${ext}`);
-  if (fs.existsSync(layoutPath)) {
-    let layoutContent = fs.readFileSync(layoutPath, "utf8");
+  if (i18nSupport) {
+    const isTypeScript = langExt === "ts";
+    const layoutJsxPath = path.join(projectPath, "app", `layout.${ext}`);
+    const layoutJsPath = path.join(projectPath, "app", "layout.js");
 
-    layoutContent = layoutContent.replace(
-      /import\s+.*from\s+['"]next\/font\/google['"];?\s*\n/g,
-      ""
-    );
+    const rootLayoutContent = isTypeScript
+      ? `export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return <>{children}</>;
+}
+`
+      : `export default function RootLayout({ children }) {
+  return <>{children}</>;
+}
+`;
 
-    layoutContent = layoutContent.replace(
-      /import\s+.*from\s+['"]next\/font\/local['"];?\s*\n/g,
-      ""
-    );
+    if (fs.existsSync(layoutJsxPath)) {
+      fs.writeFileSync(layoutJsxPath, rootLayoutContent);
+    }
+    if (fs.existsSync(layoutJsPath)) {
+      fs.writeFileSync(layoutJsPath, rootLayoutContent);
+    }
+  } else {
+    const layoutPath = path.join(projectPath, "app", `layout.${ext}`);
+    if (fs.existsSync(layoutPath)) {
+      let layoutContent = fs.readFileSync(layoutPath, "utf8");
 
-    layoutContent = layoutContent.replace(
-      /import\s+['"].*globals\.css['"];?\s*\n/g,
-      ""
-    );
+      layoutContent = layoutContent.replace(
+        /import\s+.*from\s+['"]next\/font\/google['"];?\s*\n/g,
+        ""
+      );
 
-    layoutContent = layoutContent.replace(
-      /const\s+\w+\s*=\s*(Inter|Roboto|Open_Sans)\([^)]*\);?\s*\n/g,
-      ""
-    );
+      layoutContent = layoutContent.replace(
+        /import\s+.*from\s+['"]next\/font\/local['"];?\s*\n/g,
+        ""
+      );
 
-    layoutContent = layoutContent.replace(
-      /className=\{.*\w+\.className.*\}/g,
-      ""
-    );
+      layoutContent = layoutContent.replace(
+        /import\s+['"].*globals\.css['"];?\s*\n/g,
+        ""
+      );
 
-    layoutContent = layoutContent.replace(/\n{3,}/g, "\n\n");
+      layoutContent = layoutContent.replace(
+        /const\s+\w+\s*=\s*(Inter|Roboto|Open_Sans)\([^)]*\);?\s*\n/g,
+        ""
+      );
 
-    fs.writeFileSync(layoutPath, layoutContent);
+      layoutContent = layoutContent.replace(
+        /className=\{.*\w+\.className.*\}/g,
+        ""
+      );
+
+      layoutContent = layoutContent.replace(/\n{3,}/g, "\n\n");
+
+      fs.writeFileSync(layoutPath, layoutContent);
+    }
   }
 
   if (i18nSupport) {
-    const pagePath = path.join(projectPath, "app", `page.${ext}`);
-    if (fs.existsSync(pagePath)) {
+    const pageJsxPath = path.join(projectPath, "app", `page.${ext}`);
+    if (fs.existsSync(pageJsxPath)) {
       try {
-        fs.unlinkSync(pagePath);
+        fs.unlinkSync(pageJsxPath);
+      } catch (error) {}
+    }
+    const pageJsPath = path.join(projectPath, "app", "page.js");
+    if (fs.existsSync(pageJsPath)) {
+      try {
+        fs.unlinkSync(pageJsPath);
       } catch (error) {}
     }
   } else {
@@ -741,25 +774,6 @@ export const config = {
 `;
 
       fs.writeFileSync(middlewarePath, middlewareContent);
-    }
-
-    const appLayoutPath = path.join(projectPath, "app", `layout.${ext}`);
-    if (fs.existsSync(appLayoutPath)) {
-      const rootLayoutContent = isTypeScript
-        ? `export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
-  return <>{children}</>;
-}
-`
-        : `export default function RootLayout({ children }) {
-  return <>{children}</>;
-}
-`;
-
-      fs.writeFileSync(appLayoutPath, rootLayoutContent);
     }
 
     const localeFolderPath = path.join(projectPath, "app", "[locale]");
