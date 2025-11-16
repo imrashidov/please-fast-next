@@ -1,0 +1,36 @@
+# Node modules
+node_modules/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+
+# Build output (əgər build edirsənsə)
+dist/
+build/
+
+# IDE files
+.vscode/
+.idea/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Lock files (publish üçün lazım deyil)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Temporary
+*.tmp
+*.swp
