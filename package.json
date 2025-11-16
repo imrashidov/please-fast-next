@@ -1,0 +1,51 @@
+{
+  "name": "please-fast-next",
+  "version": "1.0.0",
+  "description": "Fast and customizable Next.js CLI tool",
+  "main": "index.js",
+  "bin": {
+    "please-fast-next": "index.js"
+  },
+  "scripts": {
+    "test": "node index.js"
+  },
+  "keywords": [
+    "nextjs",
+    "next",
+    "nextjs-starter",
+    "nextjs-cli",
+    "nextjs-boilerplate",
+    "create-nextjs-app",
+    "next-app",
+    "next-template",
+    "starter-kit",
+    "scaffolding",
+    "cli",
+    "cli-tool",
+    "code-generator",
+    "project-generator",
+    "boilerplate",
+    "template",
+    "typescript",
+    "app-router",
+    "react",
+    "reactjs",
+    "frontend",
+    "web-development",
+    "starter",
+    "scaffold"
+  ],
+  "author": "imrashidov",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/imrashidov/please-fast-next.git"
+  },
+  "bugs": {
+    "url": "https://github.com/imrashidov/please-fast-next/issues"
+  },
+  "homepage": "https://github.com/imrashidov/please-fast-next#readme",
+  "engines": {
+    "node": ">=18 || >=20"
+  }
+}
