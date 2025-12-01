@@ -2,6 +2,11 @@
   "name": "please-fast-next",
   "version": "1.0.4",
   "description": "Fast and customizable Next.js CLI tool",
+  "readme": "README.md",
+  "files": [
+    "index.js",
+    "README.md"
+  ],
   "main": "index.js",
   "bin": {
     "please-fast-next": "index.js"
