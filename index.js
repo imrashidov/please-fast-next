@@ -565,12 +565,71 @@ export const routing = defineRouting({
     fs.writeFileSync(routingPath, routingContent);
 
     const navigationPath = path.join(i18nPath, `navigation.${langExt}`);
-    const navigationContent = `import { createNavigation } from "next-intl/navigation";
+    const navigationContent = isTypeScript
+      ? `import { createNavigation } from "next-intl/navigation";
 
 import { routing } from "./routing";
 
 export const { Link, redirect, usePathname, useRouter, getPathname } =
   createNavigation(routing);
+
+export function isActive(
+  currentPathname: string | null,
+  href: string | { pathname?: string }
+): boolean {
+  if (!currentPathname || !href) return false;
+
+  const hrefPath = typeof href === "string" ? href : href.pathname ?? "";
+
+  if (!hrefPath) return false;
+
+  const normalizePath = (path: string) => path.replace(/^\\/+|\\/+$/g, "");
+
+  const current = normalizePath(currentPathname);
+  const target = normalizePath(hrefPath);
+
+  if (current === target) return true;
+
+  if (current.startsWith(target + "/")) return true;
+
+  return false;
+}
+
+export function useIsActive(href: string | { pathname?: string }): boolean {
+  const pathname = usePathname();
+  return isActive(pathname, href);
+}
+`
+      : `import { createNavigation } from "next-intl/navigation";
+
+import { routing } from "./routing";
+
+export const { Link, redirect, usePathname, useRouter, getPathname } =
+  createNavigation(routing);
+
+export function isActive(currentPathname, href) {
+  if (!currentPathname || !href) return false;
+
+  let hrefPath = typeof href === "string" ? href : href.pathname;
+
+  if (!hrefPath) return false;
+
+  const normalizePath = (path) => path.replace(/^\\/+|\\/+$/g, "");
+
+  const current = normalizePath(currentPathname);
+  const target = normalizePath(hrefPath);
+
+  if (current === target) return true;
+
+  if (current.startsWith(target + "/")) return true;
+
+  return false;
+}
+
+export function useIsActive(href) {
+  const pathname = usePathname();
+  return isActive(pathname, href);
+}
 `;
 
     fs.writeFileSync(navigationPath, navigationContent);
