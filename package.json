@@ -1,6 +1,6 @@
 {
   "name": "please-fast-next",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Fast and customizable Next.js CLI tool",
   "main": "index.js",
   "bin": {
