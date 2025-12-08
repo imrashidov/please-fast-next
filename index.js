@@ -237,7 +237,7 @@ async function createFolderStructure(projectPath, config) {
   ];
 
   try {
-    execSync(`npx create-next-app@latest ${createNextAppArgs.join(" ")}`, {
+    execSync(`npx create-next-app@15.3.6 ${createNextAppArgs.join(" ")}`, {
       stdio: "inherit",
       cwd: process.cwd(),
     });
