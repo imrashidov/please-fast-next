@@ -3,8 +3,48 @@
 const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
+const https = require("https");
 const prompts = require("prompts");
 const chalk = require("chalk");
+
+const pkg = require("./package.json");
+
+function checkForUpdates() {
+  return new Promise((resolve) => {
+    https
+      .get(
+        "https://registry.npmjs.org/please-fast-next/latest",
+        { timeout: 3000 },
+        (res) => {
+          let data = "";
+          res.on("data", (chunk) => (data += chunk));
+          res.on("end", () => {
+            try {
+              const latest = JSON.parse(data).version;
+              if (latest && latest !== pkg.version) {
+                console.log(
+                  chalk.yellow(
+                    `\n⚠️  You are using please-fast-next v${pkg.version}, but v${latest} is available.`
+                  )
+                );
+                console.log(
+                  chalk.yellow(
+                    `   Run ${chalk.bold("npm i -g please-fast-next")} to update.\n`
+                  )
+                );
+              }
+            } catch {}
+            resolve();
+          });
+        }
+      )
+      .on("error", () => resolve())
+      .on("timeout", function () {
+        this.destroy();
+        resolve();
+      });
+  });
+}
 
 const questions = [
   {
@@ -61,6 +101,7 @@ const questions = [
 ];
 
 async function createProject() {
+  await checkForUpdates();
   console.log(chalk.cyan.bold("\n🚀 Welcome to please-fast-next!"));
   const answers = await prompts(questions);
   const projectName = answers?.projectName;
