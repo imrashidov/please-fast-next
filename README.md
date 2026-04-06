@@ -1,181 +1,155 @@
-# ⚡ please-fast-next
+# please-fast-next
 
-**Lightning-fast interactive CLI for generating customizable Next.js projects.**
+**Interactive CLI for generating customizable Next.js 16 projects.**
 
-Build the perfect Next.js starter in seconds — with TypeScript/JavaScript, Tailwind, Axios, SCSS, NProgress, i18n, js-cookie, and more.
+Build a production-ready Next.js starter in seconds — with TypeScript/JavaScript, Tailwind, Axios, SCSS, NProgress, i18n, and more.
 
-![Next.js](https://img.shields.io/badge/Next.js-Latest-black?style=for-the-badge)
+![Next.js](https://img.shields.io/badge/Next.js-16-black?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 ![Node](https://img.shields.io/badge/Node-18%2B-green?style=for-the-badge)
 ![NPM](https://img.shields.io/badge/NPM-please--fast--next-red?style=for-the-badge)
 
 ---
 
-# 🌐 GitHub Repository
-
-[https://github.com/imrashidov/please-fast-next](https://github.com/imrashidov/please-fast-next)
-
----
-
-# 📦 Installation
-
-Install **please-fast-next** globally via npm:
+## Installation
 
 ```bash
 npm install -g please-fast-next
 ```
 
-or using Yarn:
+or using npx (no install needed):
 
 ```bash
-yarn global add please-fast-next
+npx please-fast-next
 ```
 
 ---
 
-# 🧪 Usage
-
-Run the CLI:
+## Usage
 
 ```bash
 please-fast-next
 ```
 
----
+The CLI will ask you a series of questions to configure your project:
 
-# ▶ Start Your Project
+1. **Project name**
+2. **Language** — TypeScript (default) or JavaScript
+3. **Axios** — HTTP client with interceptors, token refresh, js-cookie
+4. **Tailwind CSS** — utility-first CSS framework
+5. **SCSS** — Sass support with pre-configured variables and mixins
+6. **NProgress** — route change progress bar
+7. **Public folder structure** — `/public/assets` and `/public/icons`
+8. **i18n** — full internationalization with `next-intl`
+
+After generation:
 
 ```bash
 cd my-app
-npm install
 npm run dev
 ```
 
 ---
 
-# 🚀 About
+## What it generates
 
-**please-fast-next** is an interactive CLI tool that helps developers instantly generate a clean, modern, fully configurable Next.js project.
+Uses `create-next-app@16.2.2` under the hood with App Router enabled.
 
-Instead of manually installing packages, creating folders, writing axios setups, setting up i18n, configuring Tailwind/SCSS — the CLI asks you what you want and builds everything automatically.
+### Base setup
 
-Perfect for:
+- Next.js 16 with App Router
+- TypeScript or JavaScript
+- Automatic cleanup of default files (Geist fonts, favicon, SVGs, globals.css, page.module.css)
 
-- Frontend developers
-- Agencies
-- Fast prototyping
-- Boilerplate creation
-- Personal starter templates
+### Axios (optional)
+
+- `/api/axios.(ts|js)` — full axios instance with:
+  - Request interceptor (auth token, locale header)
+  - Response interceptor (401 token refresh, 429 retry)
+  - `js-cookie` for token/locale management
+
+### Tailwind CSS (optional)
+
+- Configured via `create-next-app` flag
+
+### SCSS (optional)
+
+- `sass` package installed
+- Pre-configured `globals.scss` with variables and mixins
+
+### NProgress (optional)
+
+- `/providers/Provider.(tsx|jsx)` — progress bar wrapper using `next-nprogress-bar`
+- Auto-integrated into layout
+
+### i18n (optional)
+
+Full `next-intl` setup:
+
+- `/i18n/routing.(ts|js)` — locale routing config (az, en, ru)
+- `/i18n/navigation.(ts|js)` — `Link`, `useRouter`, `usePathname`, `isActive`, `useIsActive`
+- `/i18n/request.(ts|js)` — server-side translation loading (uses axios if selected, otherwise `fetch`)
+- `/app/[locale]/layout.(tsx|jsx)` — locale layout with Provider
+- `/app/[locale]/page.(tsx|jsx)` — locale page
+- `/app/[locale]/globals.(css|scss)` — global styles
+- `proxy.(ts|js)` — Next.js 16 proxy file for i18n routing (replaces the old `middleware.ts`)
+- `next.config.(ts|mjs)` automatically configured with `next-intl` plugin
+
+### SVG support
+
+- `@svgr/webpack` installed with turbopack and webpack config
 
 ---
 
-# ✨ Features
-
-The CLI asks step-by-step questions and configures your project accordingly:
-
-### 🧱 **Base Setup**
-
-- Next.js **latest version**
-- App Router enabled
-- Choose: **TypeScript** or **JavaScript**
-- Automatic cleanup of default Next.js files (fonts, favicon, SVG files)
-
-### 🌐 **Networking**
-
-- Optional **Axios** installation
-- Auto-created:
-  - `/api/axios.(js/ts)` - Full axios instance with interceptors
-  - Request/response interceptors with token refresh
-  - 429 (Too Many Requests) handling
-  - 401 (Unauthorized) handling with automatic token refresh
-- **js-cookie** automatically installed with Axios
-
-### 🎨 **Styling Options**
-
-- Optional **Tailwind CSS**
-- Optional **SCSS** support
-  - `/app/[locale]/globals.scss` (if i18n enabled)
-  - Pre-configured variables and mixins
-
-### 🚥 **Progress Indicators**
-
-- Optional **NProgress** loader
-  - Auto-created `/providers/Provider.(jsx/tsx)`
-  - Integrated with `next-nprogress-bar`
-  - Customizable progress bar
-
-### 🔧 **Utilities**
-
-- **@svgr/webpack** automatically installed (for SVG support)
-- Optional **extended `public/` structure**
-  - `/public/assets`
-  - `/public/icons`
-
-### 🌍 **i18n Support**
-
-- Optional full internationalization setup with **next-intl**
-- Auto-created files:
-  - `/i18n/routing.(js/ts)` - Routing configuration
-  - `/i18n/navigation.(js/ts)` - Navigation utilities with `isActive` and `useIsActive` helpers
-  - `/i18n/request.(js/ts)` - Server-side request configuration with translation loading
-- Auto-created structure:
-  - `/app/[locale]/layout.(jsx/tsx)` - Locale-specific layout
-  - `/app/[locale]/page.(jsx/tsx)` - Locale-specific page
-  - `/app/[locale]/globals.(css/scss)` - Locale-specific styles
-- **Middleware/Proxy**:
-  - Next.js 16+: Creates `proxy.(ts/js)` file
-  - Next.js <16: Creates `middleware.(ts/js)` file
-- **next.config.mjs** automatically configured with `next-intl` plugin
-- Supports locales: **az**, **en**, **ru**
-
-### 📁 **Generated Folder Structure**
-
-Depending on your answers, CLI generates:
+## Generated folder structure
 
 ```
 my-app/
 ├── app/
-│   ├── layout.(jsx/tsx)          # Root layout (simplified if i18n enabled)
-│   └── [locale]/                 # (if i18n enabled)
-│       ├── layout.(jsx/tsx)      # Locale layout with NextIntlClientProvider
-│       ├── page.(jsx/tsx)        # Locale page
-│       └── globals.(css/scss)    # Global styles
-├── api/                          # (if axios enabled)
-│   └── axios.(js/ts)             # Axios instance with interceptors
-├── providers/                    # (if nprogress enabled or i18n enabled)
-│   └── Provider.(jsx/tsx)        # Progress bar provider
-├── i18n/                         # (if i18n enabled)
-│   ├── routing.(js/ts)           # Routing configuration
-│   ├── navigation.(js/ts)       # Navigation utilities
-│   └── request.(js/ts)          # Request configuration
+│   ├── layout.(tsx|jsx)            # Root layout (simplified if i18n)
+│   └── [locale]/                   # (if i18n enabled)
+│       ├── layout.(tsx|jsx)        # Locale layout with Provider
+│       ├── page.(tsx|jsx)          # Locale page
+│       └── globals.(css|scss)      # Global styles
+├── api/                            # (if axios enabled)
+│   └── axios.(ts|js)               # Axios instance with interceptors
+├── providers/                      # (if nprogress or i18n enabled)
+│   └── Provider.(tsx|jsx)          # NProgress provider
+├── i18n/                           # (if i18n enabled)
+│   ├── routing.(ts|js)
+│   ├── navigation.(ts|js)
+│   └── request.(ts|js)
 ├── public/
-│   ├── assets/                   # (if extended structure enabled)
-│   └── icons/                    # (if extended structure enabled)
-├── middleware.(ts/js)           # (if i18n enabled, Next.js <16)
-├── proxy.(ts/js)                 # (if i18n enabled, Next.js 16+)
-└── next.config.mjs               # Next.js config (updated if i18n enabled)
+│   ├── assets/                     # (if public structure enabled)
+│   └── icons/                      # (if public structure enabled)
+├── proxy.(ts|js)                   # (if i18n enabled)
+└── next.config.(ts|mjs)            # Auto-configured
 ```
 
 ---
 
-# 📝 Notes
+## Config file handling
 
-- All default Next.js files (fonts, favicon, SVG files) are automatically cleaned up
-- If i18n is enabled, `app/page.(jsx/tsx)` is automatically removed
-- If i18n is enabled, `app/layout.(jsx/tsx)` is simplified to just return `{children}`
-- Next.js 16+ uses `proxy.(ts/js)` instead of `middleware.(ts/js)` for i18n routing
-- `next.config.mjs` is automatically updated with `next-intl` plugin configuration
+- **TypeScript projects** → `next.config.ts` with `import type { NextConfig }`
+- **JavaScript projects** → `next.config.mjs` with JSDoc type annotation
+
+When i18n is enabled, the config is automatically updated with the `next-intl` plugin.
 
 ---
 
-# 📄 License
+## Notes
+
+- All default Next.js boilerplate files are cleaned up (fonts, favicon, SVGs, CSS modules)
+- If i18n is enabled, `app/page` is removed and `app/layout` is simplified to `<>{children}</>`
+- Next.js 16 uses `proxy.(ts|js)` instead of `middleware.(ts|js)` for routing
+- NProgress provider is always created when i18n is enabled (even if NProgress option is not selected)
+
+---
+
+## License
 
 MIT
 
----
+## Author
 
-# 👤 Author
-
-**imrashidov**
-
-GitHub: [https://github.com/imrashidov](https://github.com/imrashidov)
+**imrashidov** — [GitHub](https://github.com/imrashidov)

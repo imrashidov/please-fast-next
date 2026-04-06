@@ -138,12 +138,12 @@ function cleanDefaultFiles(projectPath, ext, langExt, i18nSupport) {
       );
 
       layoutContent = layoutContent.replace(
-        /const\s+\w+\s*=\s*(Inter|Roboto|Open_Sans)\([^)]*\);?\s*\n/g,
+        /const\s+\w+\s*=\s*(Inter|Roboto|Open_Sans|Geist|Geist_Mono)\([^)]*\);?\s*\n/g,
         ""
       );
 
       layoutContent = layoutContent.replace(
-        /className=\{.*\w+\.className.*\}/g,
+        /className=\{[^}]*\w+\.(?:className|variable)[^}]*\}/g,
         ""
       );
 
@@ -205,7 +205,7 @@ function cleanDefaultFiles(projectPath, ext, langExt, i18nSupport) {
     } catch (error) {}
   }
 
-  const publicSvgFiles = ["next.svg", "vercel.svg"];
+  const publicSvgFiles = ["next.svg", "vercel.svg", "file.svg", "globe.svg", "window.svg"];
   publicSvgFiles.forEach((svgFile) => {
     const svgPath = path.join(projectPath, "public", svgFile);
     if (fs.existsSync(svgPath)) {
@@ -237,7 +237,7 @@ async function createFolderStructure(projectPath, config) {
   ];
 
   try {
-    execSync(`npx create-next-app@15.3.6 ${createNextAppArgs.join(" ")}`, {
+    execSync(`npx create-next-app@16.2.2 ${createNextAppArgs.join(" ")}`, {
       stdio: "inherit",
       cwd: process.cwd(),
     });
@@ -635,8 +635,11 @@ export function useIsActive(href) {
     fs.writeFileSync(navigationPath, navigationContent);
 
     const requestPath = path.join(i18nPath, `request.${langExt}`);
-    const requestContent = isTypeScript
-      ? `import { getRequestConfig } from "next-intl/server";
+    let requestContent;
+
+    if (config.axios) {
+      requestContent = isTypeScript
+        ? `import { getRequestConfig } from "next-intl/server";
 
 import axiosInstance from "@/api/axios";
 
@@ -699,7 +702,7 @@ export default getRequestConfig(async ({ requestLocale }) => {
   }
 });
 `
-      : `import { getRequestConfig } from "next-intl/server";
+        : `import { getRequestConfig } from "next-intl/server";
 
 import axiosInstance from "@/api/axios";
 
@@ -760,33 +763,137 @@ export default getRequestConfig(async ({ requestLocale }) => {
   }
 });
 `;
+    } else {
+      requestContent = isTypeScript
+        ? `import { getRequestConfig } from "next-intl/server";
+
+import { routing } from "./routing";
+
+import { cookies } from "next/headers";
+
+type TranslationMessages = Record<string, string | Record<string, unknown>>;
+
+const transformKeys = (obj: unknown): unknown => {
+  if (typeof obj !== "object" || obj === null) return obj;
+
+  if (Array.isArray(obj)) {
+    return obj.map((item) => transformKeys(item));
+  }
+
+  return Object.entries(obj as Record<string, unknown>).reduce(
+    (acc: Record<string, unknown>, [key, value]) => {
+      const newKey = key.replace(/\\./g, "_");
+      acc[newKey] = transformKeys(value);
+      return acc;
+    },
+    {}
+  );
+};
+
+export default getRequestConfig(async ({ requestLocale }) => {
+  let locale = await requestLocale;
+
+  if (!locale || !routing.locales.includes(locale as "az" | "en" | "ru")) {
+    locale = routing.defaultLocale;
+  }
+
+  const cookieStore = await cookies();
+
+  const language = cookieStore.get("NEXT_LOCALE")?.value || locale;
+
+  try {
+    const response = await fetch(
+      \`\${process.env.NEXT_PUBLIC_API_URL}/translation-list\`,
+      {
+        headers: {
+          Lang: language,
+        },
+      }
+    );
+
+    const data = await response.json();
+    const messages = transformKeys(data || {}) as TranslationMessages;
+
+    return {
+      locale,
+      messages,
+    };
+  } catch (error) {
+    console.error("Failed to load translations:", error);
+    return {
+      locale,
+      messages: {},
+    };
+  }
+});
+`
+        : `import { getRequestConfig } from "next-intl/server";
+
+import { routing } from "./routing";
+
+import { cookies } from "next/headers";
+
+const transformKeys = (obj) => {
+  if (typeof obj !== "object" || obj === null) return obj;
+
+  if (Array.isArray(obj)) {
+    return obj.map((item) => transformKeys(item));
+  }
+
+  return Object.entries(obj).reduce(
+    (acc, [key, value]) => {
+      const newKey = key.replace(/\\./g, "_");
+      acc[newKey] = transformKeys(value);
+      return acc;
+    },
+    {}
+  );
+};
+
+export default getRequestConfig(async ({ requestLocale }) => {
+  let locale = await requestLocale;
+
+  if (!locale || !routing.locales.includes(locale)) {
+    locale = routing.defaultLocale;
+  }
+
+  const cookieStore = await cookies();
+
+  const language = cookieStore.get("NEXT_LOCALE")?.value || locale;
+
+  try {
+    const response = await fetch(
+      \`\${process.env.NEXT_PUBLIC_API_URL}/translation-list\`,
+      {
+        headers: {
+          Lang: language,
+        },
+      }
+    );
+
+    const data = await response.json();
+    const messages = transformKeys(data || {});
+
+    return {
+      locale,
+      messages,
+    };
+  } catch (error) {
+    console.error("Failed to load translations:", error);
+    return {
+      locale,
+      messages: {},
+    };
+  }
+});
+`;
+    }
 
     fs.writeFileSync(requestPath, requestContent);
 
-    const packageJsonPath = path.join(projectPath, "package.json");
-    let nextVersion = "15";
-    if (fs.existsSync(packageJsonPath)) {
-      try {
-        const packageJson = JSON.parse(
-          fs.readFileSync(packageJsonPath, "utf8")
-        );
-        const nextDep =
-          packageJson.dependencies?.next || packageJson.devDependencies?.next;
-        if (nextDep) {
-          const versionMatch = nextDep.match(/(\d+)\./);
-          if (versionMatch) {
-            nextVersion = versionMatch[1];
-          }
-        }
-      } catch (error) {}
-    }
-
-    const useProxy = parseInt(nextVersion) >= 16;
-
-    if (useProxy) {
-      const proxyPath = path.join(projectPath, `proxy.${langExt}`);
-      const proxyContent = isTypeScript
-        ? `import createMiddleware from "next-intl/middleware";
+    const proxyPath = path.join(projectPath, `proxy.${langExt}`);
+    const proxyContent = isTypeScript
+      ? `import createMiddleware from "next-intl/middleware";
 
 import { routing } from "./i18n/routing";
 
@@ -796,7 +903,7 @@ export const config = {
   matcher: "/((?!api|trpc|_next|_vercel|.*\\..*).*)",
 };
 `
-        : `import createMiddleware from "next-intl/middleware";
+      : `import createMiddleware from "next-intl/middleware";
 
 import { routing } from "./i18n/routing";
 
@@ -807,33 +914,7 @@ export const config = {
 };
 `;
 
-      fs.writeFileSync(proxyPath, proxyContent);
-    } else {
-      const middlewarePath = path.join(projectPath, `middleware.${langExt}`);
-      const middlewareContent = isTypeScript
-        ? `import createMiddleware from "next-intl/middleware";
-
-import { routing } from "./i18n/routing";
-
-export default createMiddleware(routing);
-
-export const config = {
-  matcher: "/((?!api|trpc|_next|_vercel|.*\\..*).*)",
-};
-`
-        : `import createMiddleware from "next-intl/middleware";
-
-import { routing } from "./i18n/routing";
-
-export default createMiddleware(routing);
-
-export const config = {
-  matcher: "/((?!api|trpc|_next|_vercel|.*\\..*).*)",
-};
-`;
-
-      fs.writeFileSync(middlewarePath, middlewareContent);
-    }
+    fs.writeFileSync(proxyPath, proxyContent);
 
     const localeFolderPath = path.join(projectPath, "app", "[locale]");
     fs.mkdirSync(localeFolderPath, { recursive: true });
@@ -1061,27 +1142,36 @@ export default LocaleLayout;
 
     fs.writeFileSync(localeLayoutPath, localeLayoutContent);
 
+    const nextConfigTsPath = path.join(projectPath, "next.config.ts");
     const nextConfigMjsPath = path.join(projectPath, "next.config.mjs");
-    if (fs.existsSync(nextConfigMjsPath)) {
-      let existingContent = fs.readFileSync(nextConfigMjsPath, "utf8");
+    const nextConfigPath = fs.existsSync(nextConfigTsPath)
+      ? nextConfigTsPath
+      : nextConfigMjsPath;
+    if (fs.existsSync(nextConfigPath)) {
+      let existingContent = fs.readFileSync(nextConfigPath, "utf8");
 
       if (!existingContent.includes("createNextIntlPlugin")) {
-        const pluginImport = `import createNextIntlPlugin from "next-intl/plugin";\n\n`;
-        const pluginInit = `const withNextIntl = createNextIntlPlugin("./i18n/request.${langExt}");\n\n`;
+        const pluginImport = `import createNextIntlPlugin from "next-intl/plugin";\n`;
+        const pluginInit = `\nconst withNextIntl = createNextIntlPlugin("./i18n/request.${langExt}");\n`;
 
         if (existingContent.includes("const nextConfig")) {
-          existingContent = pluginImport + pluginInit + existingContent;
+          const lastImportIdx = existingContent.lastIndexOf("import ");
+          const lineEnd = existingContent.indexOf("\n", lastImportIdx);
+          existingContent =
+            existingContent.slice(0, lineEnd + 1) +
+            pluginImport +
+            pluginInit +
+            existingContent.slice(lineEnd + 1);
           existingContent = existingContent.replace(
             /export default (nextConfig|withNextIntl\(nextConfig\))/,
             "export default withNextIntl(nextConfig)"
           );
         } else {
           const newNextConfigContent = `import createNextIntlPlugin from "next-intl/plugin";
-
+${isTypeScript ? `import type { NextConfig } from "next";\n` : ""}
 const withNextIntl = createNextIntlPlugin("./i18n/request.${langExt}");
 
-/** @type {import('next').NextConfig} */
-const nextConfig = {
+${isTypeScript ? "" : `/** @type {import('next').NextConfig} */\n`}const nextConfig${isTypeScript ? `: NextConfig` : ``} = {
   output: process.env.NEXT_PUBLIC_IS_SSR === "true" ? "standalone" : undefined,
   generateEtags: false,
   images: {
@@ -1144,7 +1234,7 @@ export default withNextIntl(nextConfig);
         );
       }
 
-      fs.writeFileSync(nextConfigMjsPath, existingContent);
+      fs.writeFileSync(nextConfigPath, existingContent);
     }
   }
 }
