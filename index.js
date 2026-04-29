@@ -1197,24 +1197,8 @@ export default LocaleLayout;
     if (fs.existsSync(nextConfigPath)) {
       let existingContent = fs.readFileSync(nextConfigPath, "utf8");
 
-      if (!existingContent.includes("createNextIntlPlugin")) {
-        const pluginImport = `import createNextIntlPlugin from "next-intl/plugin";\n`;
-        const pluginInit = `\nconst withNextIntl = createNextIntlPlugin("./i18n/request.${langExt}");\n`;
-
-        if (existingContent.includes("const nextConfig")) {
-          const lastImportIdx = existingContent.lastIndexOf("import ");
-          const lineEnd = existingContent.indexOf("\n", lastImportIdx);
-          existingContent =
-            existingContent.slice(0, lineEnd + 1) +
-            pluginImport +
-            pluginInit +
-            existingContent.slice(lineEnd + 1);
-          existingContent = existingContent.replace(
-            /export default (nextConfig|withNextIntl\(nextConfig\))/,
-            "export default withNextIntl(nextConfig)"
-          );
-        } else {
-          const newNextConfigContent = `import createNextIntlPlugin from "next-intl/plugin";
+      if (!existingContent.includes("createNextIntlPlugin") || existingContent.includes("/* config options here */")) {
+        const newNextConfigContent = `import createNextIntlPlugin from "next-intl/plugin";
 ${isTypeScript ? `import { NextConfig } from "next";\n` : ""}
 const withNextIntl = createNextIntlPlugin("./i18n/request.${langExt}");
 
@@ -1291,8 +1275,7 @@ const nextConfig${isTypeScript ? `: NextConfig` : ``} = {
 export default withNextIntl(nextConfig);
 `;
 
-          existingContent = newNextConfigContent;
-        }
+        existingContent = newNextConfigContent;
       } else {
         existingContent = existingContent.replace(
           /createNextIntlPlugin\(["'][^"']+["']\)/,

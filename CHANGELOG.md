@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [2.3.1] - 2026-04-30
+
+### Fixed
+- `next.config` template was not being fully replaced when `create-next-app` generated a default empty config (`/* config options here */`); the CLI was patching the existing file instead of writing the full template
+
+---
+
 ## [2.3.0] - 2026-04-30
 
 ### Added

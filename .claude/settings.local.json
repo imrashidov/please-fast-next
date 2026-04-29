@@ -10,7 +10,8 @@
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
-      "Bash(npm publish *)"
+      "Bash(npm publish *)",
+      "Bash(node --check \"c:/Users/rashi/Desktop/Own/please-fast-next/index.js\")"
     ]
   }
 }
