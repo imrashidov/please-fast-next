@@ -1,5 +1,9 @@
 # please-fast-next
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/imrashidov/please-fast-next/master/assets/logo.png" alt="please-fast-next logo" width="300" />
+</p>
+
 **Interactive CLI for generating customizable Next.js 16 projects.**
 
 Build a production-ready Next.js starter in seconds — with TypeScript/JavaScript, Tailwind, Axios, SCSS, NProgress, i18n, and more.
@@ -29,6 +33,13 @@ npx please-fast-next
 
 ```bash
 please-fast-next
+```
+
+Check the installed version:
+
+```bash
+please-fast-next --version
+please-fast-next -v
 ```
 
 The CLI will ask you a series of questions to configure your project:
@@ -130,8 +141,9 @@ my-app/
 
 ## Config file handling
 
-- **TypeScript projects** → `next.config.ts` with `import type { NextConfig }`
-- **JavaScript projects** → `next.config.mjs` with JSDoc type annotation
+- **TypeScript projects** → `next.config.ts` with `import { NextConfig } from "next"`
+- **JavaScript projects** → `next.config.mjs` with `/** @type {import('next').NextConfig} */`
+- Both include `output: "standalone"`, full turbopack SVG loader config, and `@svgr/webpack` webpack rule
 
 When i18n is enabled, the config is automatically updated with the `next-intl` plugin.
 
@@ -143,6 +155,12 @@ When i18n is enabled, the config is automatically updated with the `next-intl` p
 - If i18n is enabled, `app/page` is removed and `app/layout` is simplified to `<>{children}</>`
 - Next.js 16 uses `proxy.(ts|js)` instead of `middleware.(ts|js)` for routing
 - NProgress provider is always created when i18n is enabled (even if NProgress option is not selected)
+
+---
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ---
 

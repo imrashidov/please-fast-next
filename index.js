@@ -9,6 +9,12 @@ const chalk = require("chalk");
 
 const pkg = require("./package.json");
 
+const args = process.argv.slice(2);
+if (args.includes("--version") || args.includes("-v")) {
+  console.log(pkg.version);
+  process.exit(0);
+}
+
 function checkForUpdates() {
   return new Promise((resolve) => {
     https
@@ -1209,31 +1215,50 @@ export default LocaleLayout;
           );
         } else {
           const newNextConfigContent = `import createNextIntlPlugin from "next-intl/plugin";
-${isTypeScript ? `import type { NextConfig } from "next";\n` : ""}
+${isTypeScript ? `import { NextConfig } from "next";\n` : ""}
 const withNextIntl = createNextIntlPlugin("./i18n/request.${langExt}");
 
-${isTypeScript ? "" : `/** @type {import('next').NextConfig} */\n`}const nextConfig${isTypeScript ? `: NextConfig` : ``} = {
-  output: process.env.NEXT_PUBLIC_IS_SSR === "true" ? "standalone" : undefined,
+/** @type {${isTypeScript ? "NextConfig" : "import('next').NextConfig"}} */
+const nextConfig${isTypeScript ? `: NextConfig` : ``} = {
+  output: "standalone",
   generateEtags: false,
+  turbopack: {
+    rules: {
+      "*.svg": {
+        loaders: [
+          {
+            loader: "@svgr/webpack",
+            options: {
+              svgoConfig: {
+                plugins: [
+                  {
+                    name: "preset-default",
+                    params: {
+                      overrides: {
+                        removeViewBox: false,
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        ],
+        as: "*.js",
+      },
+    },
+  },
   images: {
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "your-image-hosting-url.com",
+        hostname: "your-domain.com",
         pathname: "/**",
       },
     ],
     deviceSizes: [640, 750, 828, 1080, 1200, 1920],
     imageSizes: [16, 32, 48, 64, 96, 128, 256],
     formats: ["image/webp"],
-  },
-  turbopack: {
-    rules: {
-      "*.svg": {
-        loaders: ["@svgr/webpack"],
-        as: "*.js",
-      },
-    },
   },
   reactStrictMode: false,
   webpack(config) {

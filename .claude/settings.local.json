@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('/c/Users/rashi/.claude/settings.json','utf8'\\)\\); console.log\\('valid'\\)\")",
+      "Bash(node c:/Users/rashi/Desktop/Own/please-fast-next/index.js --version)",
+      "Bash(npm install *)",
+      "Bash(node index.js --version)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(npm publish *)"
+    ]
+  }
+}
