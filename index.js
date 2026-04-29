@@ -140,29 +140,18 @@ async function createProject() {
 
 function cleanDefaultFiles(projectPath, ext, langExt, i18nSupport) {
   if (i18nSupport) {
-    const isTypeScript = langExt === "ts";
     const layoutJsxPath = path.join(projectPath, "app", `layout.${ext}`);
     const layoutJsPath = path.join(projectPath, "app", "layout.js");
 
-    const rootLayoutContent = isTypeScript
-      ? `export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
-  return <>{children}</>;
-}
-`
-      : `export default function RootLayout({ children }) {
-  return <>{children}</>;
-}
-`;
-
     if (fs.existsSync(layoutJsxPath)) {
-      fs.writeFileSync(layoutJsxPath, rootLayoutContent);
+      try {
+        fs.unlinkSync(layoutJsxPath);
+      } catch (error) {}
     }
     if (fs.existsSync(layoutJsPath)) {
-      fs.writeFileSync(layoutJsPath, rootLayoutContent);
+      try {
+        fs.unlinkSync(layoutJsPath);
+      } catch (error) {}
     }
   } else {
     const layoutPath = path.join(projectPath, "app", `layout.${ext}`);
@@ -294,6 +283,22 @@ async function createFolderStructure(projectPath, config) {
 
   cleanDefaultFiles(projectPath, ext, langExt, config.i18nSupport);
 
+  if (isTypeScript) {
+    const tsconfigPath = path.join(projectPath, "tsconfig.json");
+    if (fs.existsSync(tsconfigPath)) {
+      try {
+        const tsconfig = JSON.parse(fs.readFileSync(tsconfigPath, "utf8"));
+        tsconfig.compilerOptions = tsconfig.compilerOptions || {};
+        tsconfig.compilerOptions.target = "ES2022";
+        fs.writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 2) + "\n");
+      } catch (error) {
+        console.warn(
+          chalk.yellow("Warning: Failed to update tsconfig.json target to ES2022")
+        );
+      }
+    }
+  }
+
   const packagesToInstall = [];
   packagesToInstall.push("@svgr/webpack");
   if (config.axios) {
@@ -329,158 +334,183 @@ async function createFolderStructure(projectPath, config) {
 
     const isAxiosTypeScript = axiosExt === "ts";
     const axiosContent = isAxiosTypeScript
-      ? `import axios from "axios";
+      ? `"use client";
 
+import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 import Cookies from "js-cookie";
 
-let isRefreshing: boolean = false;
+type RetriableRequest = InternalAxiosRequestConfig & { _retry?: boolean };
 
-export let isLoading: boolean = false;
-
-let failedQueue: Array<(token: string) => void> = [];
+type QueueItem = {
+  resolve: (token: string) => void;
+  reject: (reason?: unknown) => void;
+};
 
 const axiosInstance = axios.create({
   baseURL: process.env.NEXT_PUBLIC_BASE_URL,
   headers: {
-    Lang: Cookies.get("NEXT_LOCALE") || "en",
     "Content-Type": "application/json",
   },
 });
 
-axiosInstance.interceptors.request.use(
-  (config) => {
-    if (typeof window !== "undefined") {
-      const NEXT_LOCALE = Cookies.get("NEXT_LOCALE") || "en";
-      config.headers["Lang"] = NEXT_LOCALE;
-      const token = Cookies.get("token");
-      if (token) {
-        config.headers.Authorization = \`Bearer \${token}\`;
-      }
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
+let isRefreshing = false;
+let failedQueue: QueueItem[] = [];
+
+const flushQueue = (error: unknown, token: string | null) => {
+  failedQueue.forEach(({ resolve, reject }) => {
+    if (error || !token) reject(error);
+    else resolve(token);
+  });
+  failedQueue = [];
+};
+
+axiosInstance.interceptors.request.use((config) => {
+  const locale = Cookies.get("NEXT_LOCALE") || "en";
+  config.headers["Lang"] = locale;
+  const token = Cookies.get("token");
+  if (token) config.headers.Authorization = \`Bearer \${token}\`;
+  return config;
+});
 
 axiosInstance.interceptors.response.use(
-  (response) => {
-    isLoading = false;
-    return response;
-  },
-  async (error) => {
-    const originalRequest = error.config;
+  (response) => response,
+  async (error: AxiosError) => {
+    const originalRequest = error.config as RetriableRequest | undefined;
+    if (!originalRequest) return Promise.reject(error);
+
     if (error.response?.status === 429) {
-      isLoading = true;
-      console.log("Loading... Too Many Requests (429)");
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          isLoading = false;
-          resolve(axiosInstance.request(originalRequest));
-        }, 3000);
-      });
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      return axiosInstance.request(originalRequest);
     }
-    if (error.response?.status === 401 && !isRefreshing) {
-      isRefreshing = true;
-      const refreshToken = Cookies.get("refresh_token");
-      if (refreshToken) {
-        try {
-          const response = await axiosInstance.post("/refresh", {
-            refresh_token: refreshToken,
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({
+            resolve: (token) => {
+              originalRequest.headers.Authorization = \`Bearer \${token}\`;
+              resolve(axiosInstance(originalRequest));
+            },
+            reject,
           });
-          const newToken = response.data.token;
-          Cookies.set("token", newToken);
-          originalRequest.headers.Authorization = \`Bearer \${newToken}\`;
-          isRefreshing = false;
-          failedQueue.forEach((callback) => callback(newToken));
-          failedQueue = [];
-          return axiosInstance(originalRequest);
-        } catch (refreshError) {
-          isRefreshing = false;
-          return Promise.reject(refreshError);
-        }
+        });
       }
-      return Promise.reject(error);
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      const refreshToken = Cookies.get("refresh_token");
+      if (!refreshToken) {
+        isRefreshing = false;
+        return Promise.reject(error);
+      }
+
+      try {
+        const { data } = await axios.post(
+          \`\${process.env.NEXT_PUBLIC_BASE_URL}/refresh\`,
+          { refresh_token: refreshToken }
+        );
+        const newToken: string = data.token;
+        Cookies.set("token", newToken);
+        flushQueue(null, newToken);
+        originalRequest.headers.Authorization = \`Bearer \${newToken}\`;
+        return axiosInstance(originalRequest);
+      } catch (refreshError) {
+        flushQueue(refreshError, null);
+        return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
+      }
     }
-    isLoading = false;
+
     return Promise.reject(error);
   }
 );
 
 export default axiosInstance;
 `
-      : `import axios from "axios";
+      : `"use client";
 
+import axios from "axios";
 import Cookies from "js-cookie";
-
-let isRefreshing = false;
-
-export let isLoading = false;
-
-let failedQueue = [];
 
 const axiosInstance = axios.create({
   baseURL: process.env.NEXT_PUBLIC_BASE_URL,
   headers: {
-    Lang: Cookies.get("NEXT_LOCALE") || "en",
     "Content-Type": "application/json",
   },
 });
 
-axiosInstance.interceptors.request.use(
-  (config) => {
-    if (typeof window !== "undefined") {
-      const NEXT_LOCALE = Cookies.get("NEXT_LOCALE") || "en";
-      config.headers["Lang"] = NEXT_LOCALE;
-      const token = Cookies.get("token");
-      if (token) {
-        config.headers.Authorization = \`Bearer \${token}\`;
-      }
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
+let isRefreshing = false;
+let failedQueue = [];
+
+const flushQueue = (error, token) => {
+  failedQueue.forEach(({ resolve, reject }) => {
+    if (error || !token) reject(error);
+    else resolve(token);
+  });
+  failedQueue = [];
+};
+
+axiosInstance.interceptors.request.use((config) => {
+  const locale = Cookies.get("NEXT_LOCALE") || "en";
+  config.headers["Lang"] = locale;
+  const token = Cookies.get("token");
+  if (token) config.headers.Authorization = \`Bearer \${token}\`;
+  return config;
+});
 
 axiosInstance.interceptors.response.use(
-  (response) => {
-    isLoading = false;
-    return response;
-  },
+  (response) => response,
   async (error) => {
     const originalRequest = error.config;
+    if (!originalRequest) return Promise.reject(error);
+
     if (error.response?.status === 429) {
-      isLoading = true;
-      console.log("Loading... Too Many Requests (429)");
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          isLoading = false;
-          resolve(axiosInstance.request(originalRequest));
-        }, 3000);
-      });
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      return axiosInstance.request(originalRequest);
     }
-    if (error.response?.status === 401 && !isRefreshing) {
-      isRefreshing = true;
-      const refreshToken = Cookies.get("refresh_token");
-      if (refreshToken) {
-        try {
-          const response = await axiosInstance.post("/refresh", {
-            refresh_token: refreshToken,
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({
+            resolve: (token) => {
+              originalRequest.headers.Authorization = \`Bearer \${token}\`;
+              resolve(axiosInstance(originalRequest));
+            },
+            reject,
           });
-          const newToken = response.data.token;
-          Cookies.set("token", newToken);
-          originalRequest.headers.Authorization = \`Bearer \${newToken}\`;
-          isRefreshing = false;
-          failedQueue.forEach((callback) => callback(newToken));
-          failedQueue = [];
-          return axiosInstance(originalRequest);
-        } catch (refreshError) {
-          isRefreshing = false;
-          return Promise.reject(refreshError);
-        }
+        });
       }
-      return Promise.reject(error);
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      const refreshToken = Cookies.get("refresh_token");
+      if (!refreshToken) {
+        isRefreshing = false;
+        return Promise.reject(error);
+      }
+
+      try {
+        const { data } = await axios.post(
+          \`\${process.env.NEXT_PUBLIC_BASE_URL}/refresh\`,
+          { refresh_token: refreshToken }
+        );
+        const newToken = data.token;
+        Cookies.set("token", newToken);
+        flushQueue(null, newToken);
+        originalRequest.headers.Authorization = \`Bearer \${newToken}\`;
+        return axiosInstance(originalRequest);
+      } catch (refreshError) {
+        flushQueue(refreshError, null);
+        return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
+      }
     }
-    isLoading = false;
+
     return Promise.reject(error);
   }
 );
@@ -489,6 +519,76 @@ export default axiosInstance;
 `;
 
     fs.writeFileSync(path.join(apiPath, `axios.${axiosExt}`), axiosContent);
+
+    const serverContent = isAxiosTypeScript
+      ? `import { cookies } from "next/headers";
+
+type FetchOptions = Omit<RequestInit, "headers"> & {
+  headers?: Record<string, string>;
+  next?: { revalidate?: number | false; tags?: string[] };
+};
+
+export async function serverFetch<T = unknown>(
+  path: string,
+  options: FetchOptions = {}
+): Promise<T> {
+  const cookieStore = await cookies();
+  const locale = cookieStore.get("NEXT_LOCALE")?.value || "en";
+  const token = cookieStore.get("token")?.value;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Lang: locale,
+    ...(options.headers || {}),
+  };
+  if (token) headers.Authorization = \`Bearer \${token}\`;
+
+  const baseURL = process.env.NEXT_PUBLIC_BASE_URL || "";
+  const response = await fetch(\`\${baseURL}\${path}\`, {
+    ...options,
+    headers,
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      \`serverFetch \${path} failed: \${response.status} \${response.statusText}\`
+    );
+  }
+
+  return response.json() as Promise<T>;
+}
+`
+      : `import { cookies } from "next/headers";
+
+export async function serverFetch(path, options = {}) {
+  const cookieStore = await cookies();
+  const locale = cookieStore.get("NEXT_LOCALE")?.value || "en";
+  const token = cookieStore.get("token")?.value;
+
+  const headers = {
+    "Content-Type": "application/json",
+    Lang: locale,
+    ...(options.headers || {}),
+  };
+  if (token) headers.Authorization = \`Bearer \${token}\`;
+
+  const baseURL = process.env.NEXT_PUBLIC_BASE_URL || "";
+  const response = await fetch(\`\${baseURL}\${path}\`, {
+    ...options,
+    headers,
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      \`serverFetch \${path} failed: \${response.status} \${response.statusText}\`
+    );
+  }
+
+  return response.json();
+}
+`;
+
+    fs.writeFileSync(path.join(apiPath, `server.${axiosExt}`), serverContent);
   }
 
   if (config.nprogress) {
@@ -500,7 +600,7 @@ export default axiosInstance;
 
 import { AppProgressBar as ProgressBar } from "next-nprogress-bar";
 
-const Provider = ({ children }: { children: React.ReactNode }) => {
+const ProgressBarProvider = ({ children }: { children: React.ReactNode }) => {
   return (
     <>
       {children}
@@ -518,13 +618,13 @@ const Provider = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-export default Provider;
+export default ProgressBarProvider;
 `
       : `"use client";
 
 import { AppProgressBar as ProgressBar } from "next-nprogress-bar";
 
-const Provider = ({ children }) => {
+const ProgressBarProvider = ({ children }) => {
   return (
     <>
       {children}
@@ -542,19 +642,19 @@ const Provider = ({ children }) => {
   );
 };
 
-export default Provider;
+export default ProgressBarProvider;
 `;
 
     fs.writeFileSync(
-      path.join(providersPath, `Provider.${ext}`),
+      path.join(providersPath, `ProgressBarProvider.${ext}`),
       providerContent
     );
 
     const layoutPath = path.join(projectPath, "app", `layout.${ext}`);
     if (fs.existsSync(layoutPath)) {
       let layoutContent = fs.readFileSync(layoutPath, "utf8");
-      if (!layoutContent.includes("providers/Provider")) {
-        const providerImport = `import Provider from "@/providers/Provider";\n`;
+      if (!layoutContent.includes("providers/ProgressBarProvider")) {
+        const providerImport = `import ProgressBarProvider from "@/providers/ProgressBarProvider";\n`;
 
         const importMatch = layoutContent.match(/(import\s+.*\n)/);
         if (importMatch) {
@@ -575,7 +675,7 @@ export default Provider;
 
           layoutContent = layoutContent.replace(
             bodyRegex,
-            `${bodyOpen}\n        <Provider>${bodyContent}        </Provider>\n      ${bodyClose}`
+            `${bodyOpen}\n        <ProgressBarProvider>${bodyContent}        </ProgressBarProvider>\n      ${bodyClose}`
           );
         }
 
@@ -682,17 +782,10 @@ export function useIsActive(href) {
     fs.writeFileSync(navigationPath, navigationContent);
 
     const requestPath = path.join(i18nPath, `request.${langExt}`);
-    let requestContent;
-
-    if (config.axios) {
-      requestContent = isTypeScript
-        ? `import { getRequestConfig } from "next-intl/server";
-
-import axiosInstance from "@/api/axios";
+    const requestContent = isTypeScript
+      ? `import { getRequestConfig } from "next-intl/server";
 
 import { routing } from "./routing";
-
-import { cookies } from "next/headers";
 
 type TranslationMessages = Record<string, string | Record<string, unknown>>;
 
@@ -719,166 +812,29 @@ export default getRequestConfig(async ({ requestLocale }) => {
   if (!locale || !routing.locales.includes(locale as "az" | "en" | "ru")) {
     locale = routing.defaultLocale;
   }
-
-  const cookieStore = await cookies();
-
-  const language = cookieStore.get("NEXT_LOCALE")?.value || locale;
-
-  try {
-    const response = await axiosInstance.get<TranslationMessages>(
-      \`\${process.env.NEXT_PUBLIC_API_URL}/translation-list\`,
-      {
-        headers: {
-          Lang: language,
-        },
-      }
-    );
-
-    const messages = transformKeys(response.data || {}) as TranslationMessages;
-
-    return {
-      locale,
-      messages,
-    };
-  } catch (error) {
-    console.error("Failed to load translations:", error);
-    return {
-      locale,
-      messages: {},
-    };
-  }
-});
-`
-        : `import { getRequestConfig } from "next-intl/server";
-
-import axiosInstance from "@/api/axios";
-
-import { routing } from "./routing";
-
-import { cookies } from "next/headers";
-
-const transformKeys = (obj) => {
-  if (typeof obj !== "object" || obj === null) return obj;
-
-  if (Array.isArray(obj)) {
-    return obj.map((item) => transformKeys(item));
-  }
-
-  return Object.entries(obj).reduce(
-    (acc, [key, value]) => {
-      const newKey = key.replace(/\\./g, "_");
-      acc[newKey] = transformKeys(value);
-      return acc;
-    },
-    {}
-  );
-};
-
-export default getRequestConfig(async ({ requestLocale }) => {
-  let locale = await requestLocale;
-
-  if (!locale || !routing.locales.includes(locale)) {
-    locale = routing.defaultLocale;
-  }
-
-  const cookieStore = await cookies();
-
-  const language = cookieStore.get("NEXT_LOCALE")?.value || locale;
-
-  try {
-    const response = await axiosInstance.get(
-      \`\${process.env.NEXT_PUBLIC_API_URL}/translation-list\`,
-      {
-        headers: {
-          Lang: language,
-        },
-      }
-    );
-
-    const messages = transformKeys(response.data || {});
-
-    return {
-      locale,
-      messages,
-    };
-  } catch (error) {
-    console.error("Failed to load translations:", error);
-    return {
-      locale,
-      messages: {},
-    };
-  }
-});
-`;
-    } else {
-      requestContent = isTypeScript
-        ? `import { getRequestConfig } from "next-intl/server";
-
-import { routing } from "./routing";
-
-import { cookies } from "next/headers";
-
-type TranslationMessages = Record<string, string | Record<string, unknown>>;
-
-const transformKeys = (obj: unknown): unknown => {
-  if (typeof obj !== "object" || obj === null) return obj;
-
-  if (Array.isArray(obj)) {
-    return obj.map((item) => transformKeys(item));
-  }
-
-  return Object.entries(obj as Record<string, unknown>).reduce(
-    (acc: Record<string, unknown>, [key, value]) => {
-      const newKey = key.replace(/\\./g, "_");
-      acc[newKey] = transformKeys(value);
-      return acc;
-    },
-    {}
-  );
-};
-
-export default getRequestConfig(async ({ requestLocale }) => {
-  let locale = await requestLocale;
-
-  if (!locale || !routing.locales.includes(locale as "az" | "en" | "ru")) {
-    locale = routing.defaultLocale;
-  }
-
-  const cookieStore = await cookies();
-
-  const language = cookieStore.get("NEXT_LOCALE")?.value || locale;
 
   try {
     const response = await fetch(
       \`\${process.env.NEXT_PUBLIC_API_URL}/translation-list\`,
       {
-        headers: {
-          Lang: language,
-        },
+        headers: { Lang: locale },
+        next: { revalidate: 3600, tags: ["translations"] },
       }
     );
 
     const data = await response.json();
     const messages = transformKeys(data || {}) as TranslationMessages;
 
-    return {
-      locale,
-      messages,
-    };
+    return { locale, messages };
   } catch (error) {
     console.error("Failed to load translations:", error);
-    return {
-      locale,
-      messages: {},
-    };
+    return { locale, messages: {} };
   }
 });
 `
-        : `import { getRequestConfig } from "next-intl/server";
+      : `import { getRequestConfig } from "next-intl/server";
 
 import { routing } from "./routing";
-
-import { cookies } from "next/headers";
 
 const transformKeys = (obj) => {
   if (typeof obj !== "object" || obj === null) return obj;
@@ -904,37 +860,25 @@ export default getRequestConfig(async ({ requestLocale }) => {
     locale = routing.defaultLocale;
   }
 
-  const cookieStore = await cookies();
-
-  const language = cookieStore.get("NEXT_LOCALE")?.value || locale;
-
   try {
     const response = await fetch(
       \`\${process.env.NEXT_PUBLIC_API_URL}/translation-list\`,
       {
-        headers: {
-          Lang: language,
-        },
+        headers: { Lang: locale },
+        next: { revalidate: 3600, tags: ["translations"] },
       }
     );
 
     const data = await response.json();
     const messages = transformKeys(data || {});
 
-    return {
-      locale,
-      messages,
-    };
+    return { locale, messages };
   } catch (error) {
     console.error("Failed to load translations:", error);
-    return {
-      locale,
-      messages: {},
-    };
+    return { locale, messages: {} };
   }
 });
 `;
-    }
 
     fs.writeFileSync(requestPath, requestContent);
 
@@ -947,7 +891,7 @@ import { routing } from "./i18n/routing";
 export default createMiddleware(routing);
 
 export const config = {
-  matcher: "/((?!api|trpc|_next|_vercel|.*\\..*).*)",
+  matcher: "/((?!api|trpc|_next|_vercel|.*\\\\..*).*)",
 };
 `
       : `import createMiddleware from "next-intl/middleware";
@@ -957,7 +901,7 @@ import { routing } from "./i18n/routing";
 export default createMiddleware(routing);
 
 export const config = {
-  matcher: "/((?!api|trpc|_next|_vercel|.*\\..*).*)",
+  matcher: "/((?!api|trpc|_next|_vercel|.*\\\\..*).*)",
 };
 `;
 
@@ -1070,7 +1014,7 @@ export default LocalePage;
 
 import { AppProgressBar as ProgressBar } from "next-nprogress-bar";
 
-const Provider = ({ children }: { children: React.ReactNode }) => {
+const ProgressBarProvider = ({ children }: { children: React.ReactNode }) => {
   return (
     <>
       {children}
@@ -1088,13 +1032,13 @@ const Provider = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-export default Provider;
+export default ProgressBarProvider;
 `
         : `"use client";
 
 import { AppProgressBar as ProgressBar } from "next-nprogress-bar";
 
-const Provider = ({ children }) => {
+const ProgressBarProvider = ({ children }) => {
   return (
     <>
       {children}
@@ -1112,11 +1056,11 @@ const Provider = ({ children }) => {
   );
 };
 
-export default Provider;
+export default ProgressBarProvider;
 `;
 
       fs.writeFileSync(
-        path.join(providersPath, `Provider.${ext}`),
+        path.join(providersPath, `ProgressBarProvider.${ext}`),
         providerContent
       );
     }
@@ -1125,14 +1069,16 @@ export default Provider;
     const localeLayoutContent = isTypeScript
       ? `import "./globals.${config.scss ? "scss" : "css"}";
 
-import Provider from "@/providers/Provider";
-import type { Metadata } from "next";
+import { NextIntlClientProvider } from "next-intl";
+import { getMessages } from "next-intl/server";
+import { notFound } from "next/navigation";
+
+import ProgressBarProvider from "@/providers/ProgressBarProvider";
+import { routing } from "@/i18n/routing";
 
 export const viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
 };
 
 const LocaleLayout = async ({
@@ -1144,13 +1090,20 @@ const LocaleLayout = async ({
 }) => {
   const { locale } = await params;
 
+  if (!routing.locales.includes(locale as (typeof routing.locales)[number])) {
+    notFound();
+  }
+
+  const messages = await getMessages();
+
   return (
     <html lang={locale} suppressHydrationWarning>
-      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       <body>
-        <Provider>
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <ProgressBarProvider>
             <main>{children}</main>
-        </Provider>
+          </ProgressBarProvider>
+        </NextIntlClientProvider>
       </body>
     </html>
   );
@@ -1160,25 +1113,35 @@ export default LocaleLayout;
 `
       : `import "./globals.${config.scss ? "scss" : "css"}";
 
-import Provider from "@/providers/Provider";
+import { NextIntlClientProvider } from "next-intl";
+import { getMessages } from "next-intl/server";
+import { notFound } from "next/navigation";
+
+import ProgressBarProvider from "@/providers/ProgressBarProvider";
+import { routing } from "@/i18n/routing";
 
 export const viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
 };
 
 const LocaleLayout = async ({ children, params }) => {
   const { locale } = await params;
 
+  if (!routing.locales.includes(locale)) {
+    notFound();
+  }
+
+  const messages = await getMessages();
+
   return (
     <html lang={locale} suppressHydrationWarning>
-      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       <body>
-        <Provider>
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <ProgressBarProvider>
             <main>{children}</main>
-        </Provider>
+          </ProgressBarProvider>
+        </NextIntlClientProvider>
       </body>
     </html>
   );
@@ -1205,7 +1168,6 @@ const withNextIntl = createNextIntlPlugin("./i18n/request.${langExt}");
 /** @type {${isTypeScript ? "NextConfig" : "import('next').NextConfig"}} */
 const nextConfig${isTypeScript ? `: NextConfig` : ``} = {
   output: "standalone",
-  generateEtags: false,
   turbopack: {
     rules: {
       "*.svg": {
@@ -1243,32 +1205,6 @@ const nextConfig${isTypeScript ? `: NextConfig` : ``} = {
     deviceSizes: [640, 750, 828, 1080, 1200, 1920],
     imageSizes: [16, 32, 48, 64, 96, 128, 256],
     formats: ["image/webp"],
-  },
-  reactStrictMode: false,
-  webpack(config) {
-    config.module.rules.push({
-      test: /\\.svg$/,
-      use: [
-        {
-          loader: "@svgr/webpack",
-          options: {
-            svgoConfig: {
-              plugins: [
-                {
-                  name: "preset-default",
-                  params: {
-                    overrides: {
-                      removeViewBox: false,
-                    },
-                  },
-                },
-              ],
-            },
-          },
-        },
-      ],
-    });
-    return config;
   },
 };
 
